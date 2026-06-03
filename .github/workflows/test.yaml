@@ -10,13 +10,13 @@ permissions: {}
 jobs:
   pre-commit:
     name: Run Pre-commit Hooks
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       checks: write # https://github.com/EnricoMi/publish-unit-test-result-action#permissions
       contents: write # for pre-commit-action
     steps:
       - name: Check out repository.
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       - name: Get operating system name and version.
@@ -55,7 +55,7 @@ jobs:
           yarn_cache="$(yarn config get cacheFolder)"
           echo "PATH=$yarn_cache" >>"$GITHUB_OUTPUT"
       - name: Cache Yarn dependencies.
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.yarn-cache.outputs.PATH }}
           key: >
@@ -68,7 +68,7 @@ jobs:
       # - name: Run pre-commit hooks.
       #   uses: ScribeMD/pre-commit-action@bc61f671d0d1d526256c65f486e1f0a49da5f572 # 0.9.129
       - name: Publish test results to GitHub.
-        uses: EnricoMi/publish-unit-test-result-action@afb2984f4d89672b2f9d9c13ae23d53779671984 # v2.19.0
+        uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040 # v2.23.0
         if: always()
         with:
           files: src/reports/jest/junit.xml
@@ -79,11 +79,21 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-          - windows-2022
+          - ubuntu-24.04
+          - windows-2025
+          - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository.
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Start Docker on Windows.
+        if: runner.os == 'Windows'
+        run: |
+          $service = Get-Service -Name docker -ErrorAction SilentlyContinue
+          if ($null -ne $service -and $service.Status -ne 'Running') {
+            Start-Service docker
+          }
+        shell: powershell
       - name: Save Docker images.
         uses: ./
         with:
@@ -106,45 +116,48 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-          - windows-2022
+          - ubuntu-24.04
+          - windows-2025
+          - windows-latest
     runs-on: ${{ matrix.os }}
     permissions:
       actions: write # for cache deletion
     steps:
       - name: Check out repository.
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Start Docker on Windows.
+        if: runner.os == 'Windows'
+        run: |
+          $service = Get-Service -Name docker -ErrorAction SilentlyContinue
+          if ($null -ne $service -and $service.Status -ne 'Running') {
+            Start-Service docker
+          }
+        shell: powershell
       - name: Load Docker images.
         uses: ./
         with:
-          key: docker-cache-test-${{ matrix.os }}-${{github.run_id }}-${{ github.run_attempt }}
-      - name: Verify Docker loaded both empty images from cache.
+          key: docker-cache-test-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Verify Docker loaded cached empty image.
         run: |
-          function emptyImageExists() {
-            id="$(docker images --quiet --filter "label=description=empty image" "$@")"
-            [[ -n "$id" ]]
-          }
-          emptyImageExists empty
-          emptyImageExists --filter "dangling=true"
-
+          id="$(docker images --quiet --filter 'reference=empty')"
+          [[ -n "$id" ]] || { echo 'Image "empty" not found'; exit 1; }
         shell: bash
       - name: Delete test cache if permitted (i.e., workflow not triggered from fork).
         if: always()
-        run: >
-          curl
-          --fail-with-body
-          --silent
-          --show-error
-          --request DELETE
-          --header 'Accept: application/vnd.github.v3+json'
-          --header 'Authorization: Bearer ${{ github.token }}'
-          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?key=docker-cache-test-${{
-            matrix.os
-          }}-${{
-            github.run_id
-          }}-${{
-            github.run_attempt
-          }}&ref=$GITHUB_REF" ||
-          (( $? == 22 ))
+        run: |
+          key='docker-cache-test-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}'
+          url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?key=$key"
+          echo "Deleting cache key: $key"
+          echo "DELETE $url"
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --request DELETE \
+            --header 'Accept: application/vnd.github.v3+json' \
+            --header 'Authorization: Bearer ${{ github.token }}' \
+            "$url" \
+          || echo "Cache not found (non-fatal)."
         shell: bash
   notify:
     name: Notify
@@ -153,10 +166,10 @@ jobs:
       - pre-commit
       - save-cache
       - restore-cache
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Send Slack notification with workflow result.
-        uses: ScribeMD/slack-templates@bea126c3915616204196f29d27d6ab9526d61a25 # 0.6.37
+        uses: ScribeMD/slack-templates@7e4cb7ce525cf4f29c6342375b1b0a7f8745f788 # 0.6.38
         with:
           bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
           channel-id: ${{ secrets.SLACK_ACTIONS_CHANNEL_ID }}

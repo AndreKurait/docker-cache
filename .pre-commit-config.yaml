@@ -7,7 +7,7 @@ default_install_hook_types:
   - pre-merge-commit
   - pre-push
 default_language_version:
-  python: python3.12.2 # Keep in sync with .tool-versions and pyproject.toml.
+  python: python3.14.5 # Keep in sync with .tool-versions and pyproject.toml.
 default_stages:
   - commit
   - push
@@ -40,19 +40,19 @@ repos:
       - id: yarn-build
       - id: yarn-test
       - id: megalinter-incremental
-        args: &megalinter-args [--flavor, javascript, --release, v7.7.0]
+        args: &megalinter-args [--flavor, javascript, --release, v9.4.0]
       - id: megalinter-full
         args: *megalinter-args
 
   ## Markdown
   - repo: https://github.com/frnmst/md-toc
-    rev: 8.2.3
+    rev: 9.0.0
     hooks:
       - id: md-toc
 
   ## Python, TOML, Polyglot, Git
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       ### Automatically fix issues.
       - id: end-of-file-fixer
@@ -89,19 +89,19 @@ repos:
 
   ## Polyglot
   - repo: https://github.com/pivotal/LicenseFinder
-    rev: v7.1.0
+    rev: v7.2.1
     hooks:
       - id: license-finder
 
   ## Natural language
   - repo: https://github.com/PrincetonUniversity/blocklint
-    rev: v0.2.4
+    rev: v0.3.0
     hooks:
       - id: blocklint
 
   ## Git
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v3.18.4 # Keep in sync with pyproject.toml.
+    rev: v4.16.3 # Keep in sync with pyproject.toml.
     hooks:
       - id: commitizen
       - id: commitizen-branch
