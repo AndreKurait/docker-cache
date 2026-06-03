@@ -1,10 +1,10 @@
 {
   "name": "docker-cache",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Cache Docker Images Whether Built or Pulled",
-  "homepage": "https://github.com/ScribeMD/docker-cache#readme",
+  "homepage": "https://github.com/AndreKurait/docker-cache#readme",
   "main": "dist/main/index.js",
-  "repository": "github:ScribeMD/docker-cache",
+  "repository": "github:AndreKurait/docker-cache",
   "author": "Kurt von Laven <kurt.von.laven@gmail.com>",
   "license": "MIT",
   "type": "module",

@@ -4,7 +4,7 @@
     "@tsconfig/strictest/tsconfig.json"
   ],
   "include": ["jest.config.ts", "src/**/*.ts", "types/**/*.ts"],
-  "exclude": ["**/reports"],
+  "exclude": ["**/reports", "src/**/*.test.ts", "src/arbitraries/**", "src/mocks/**"],
   "compilerOptions": {
     "module": "es2022",
     "moduleResolution": "bundler",
