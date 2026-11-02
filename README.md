@@ -16,7 +16,7 @@ Place this step **after checkout and before pulling or building Docker images**:
 
 ```yaml
 - name: Cache Docker images
-  uses: AndreKurait/docker-cache@7a3887908bdb97935395833df69b060cfcca0f7f # 0.7.0
+  uses: AndreKurait/docker-cache@0.7.1
   with:
     key: docker-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('compose.yaml') }}
 ```
@@ -25,9 +25,10 @@ Replace `compose.yaml` with the files that determine your image versions, such
 as `docker-compose.yml` or Dockerfiles. Check those files out before calculating
 the key. Your later steps can pull, build, and run Docker images normally.
 
-The commit above pins release [0.7.0](https://github.com/AndreKurait/docker-cache/releases/tag/0.7.0).
-You can also use `AndreKurait/docker-cache@0.7.0`. To migrate from the original
-action, change the owner from `ScribeMD` to `AndreKurait` and select a release.
+The example selects release [0.7.1](https://github.com/AndreKurait/docker-cache/releases/tag/0.7.1).
+For a full commit pin, replace `0.7.1` with the SHA listed in that release's
+notes. Existing version tags are not moved. To migrate from the original action,
+change the owner from `ScribeMD` to `AndreKurait` and select a release.
 
 ## How it works
 
