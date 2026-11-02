@@ -16,11 +16,7 @@ const LIST_COMMAND =
   `{{ if ne .Tag "<none>" }}:{{ .Tag }}{{ end }}{{ else }}{{ .ID }}{{ end }}'`;
 const WINDOWS_DOCKER_READY_ATTEMPTS = 30;
 const WINDOWS_DOCKER_READY_DELAY_MS = 2_000;
-
-const getShell = (platform: NodeJS.Platform): string =>
-  platform === "win32"
-    ? "C:\\Program Files\\Git\\bin\\bash.exe"
-    : "/usr/bin/bash";
+const WINDOWS_SHELL = "C:\\Program Files\\Git\\bin\\bash.exe";
 
 const waitForDocker = async (
   platform: NodeJS.Platform = process.platform,
@@ -36,7 +32,7 @@ const waitForDocker = async (
     attempt += 1
   ) {
     try {
-      await execAsPromised(DOCKER_READY_COMMAND, { shell: getShell(platform) });
+      await execAsPromised(DOCKER_READY_COMMAND, { shell: WINDOWS_SHELL });
       if (attempt > 1) {
         info("Docker is ready on Windows.");
       }
@@ -92,7 +88,8 @@ const saveDockerImages = async (
      * loadDockerImages and now.
      */
   } else if (
-    key === (await restoreCache([""], key, [], { lookupOnly: true }))
+    key ===
+    (await restoreCache([DOCKER_IMAGES_PATH], key, [], { lookupOnly: true }))
   ) {
     info(
       "A cache miss occurred during the initial attempt to load Docker " +

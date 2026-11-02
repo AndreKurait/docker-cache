@@ -16,6 +16,6 @@ describe("Main", (): void => {
   test("loads Docker images on module load", async (): Promise<void> => {
     await import("./main.js");
 
-    expect(docker.loadDockerImages).lastCalledWith();
+    expect(docker.loadDockerImages).toHaveBeenLastCalledWith();
   });
 });

@@ -54,29 +54,34 @@ describe("Docker Windows readiness", (): void => {
   test("waits for Docker before listing images on Windows", async (): Promise<void> => {
     core.getInput.mockReturnValue("my-key");
     cache.restoreCache.mockResolvedValueOnce(undefined);
-    dockerReadyMock.mockRejectedValueOnce(new Error("Docker is not ready yet."));
+    dockerReadyMock.mockRejectedValueOnce(
+      new Error("Docker is not ready yet."),
+    );
     dockerReadyMock.mockResolvedValueOnce({ stdout: "27.0.1", stderr: "" });
     util.execBashCommand.mockResolvedValueOnce("existing-image");
 
     await docker.loadDockerImages("win32");
 
-    expect(core.getInput).lastCalledWith("key", {
+    expect(core.getInput).toHaveBeenLastCalledWith("key", {
       required: true,
     } satisfies InputOptions);
-    expect(nodeUtil.promisify).lastCalledWith(exec);
+    expect(nodeUtil.promisify).toHaveBeenLastCalledWith(exec);
     expect(dockerReadyMock).toHaveBeenNthCalledWith(1, DOCKER_READY_COMMAND, {
       shell: WINDOWS_SHELL,
     });
     expect(dockerReadyMock).toHaveBeenNthCalledWith(2, DOCKER_READY_COMMAND, {
       shell: WINDOWS_SHELL,
     });
-    expect(timers.setTimeout).lastCalledWith(2_000);
+    expect(timers.setTimeout).toHaveBeenLastCalledWith(2_000);
     expect(core.info).toHaveBeenCalledWith(
       "Docker is not ready yet on Windows. Retrying in 2 seconds (1/30).",
     );
     expect(core.info).toHaveBeenCalledWith("Docker is ready on Windows.");
-    expect(util.execBashCommand).lastCalledWith(LIST_COMMAND);
-    expect(core.saveState).lastCalledWith(docker.DOCKER_IMAGES_LIST, "existing-image");
+    expect(util.execBashCommand).toHaveBeenLastCalledWith(LIST_COMMAND);
+    expect(core.saveState).toHaveBeenLastCalledWith(
+      docker.DOCKER_IMAGES_LIST,
+      "existing-image",
+    );
   });
 
   test("preserves current behavior on Linux", async (): Promise<void> => {
@@ -88,6 +93,37 @@ describe("Docker Windows readiness", (): void => {
 
     expect(nodeUtil.promisify).not.toHaveBeenCalled();
     expect(timers.setTimeout).not.toHaveBeenCalled();
-    expect(util.execBashCommand).lastCalledWith(LIST_COMMAND);
+    expect(util.execBashCommand).toHaveBeenLastCalledWith(LIST_COMMAND);
+  });
+
+  test("loads restored images immediately when Windows Docker is ready", async (): Promise<void> => {
+    core.getInput.mockReturnValue("my-key");
+    cache.restoreCache.mockResolvedValueOnce("my-key");
+    dockerReadyMock.mockResolvedValueOnce({ stdout: "27.0.1", stderr: "" });
+    util.execBashCommand.mockResolvedValueOnce("");
+
+    await docker.loadDockerImages("win32");
+
+    expect(dockerReadyMock).toHaveBeenCalledTimes(1);
+    expect(timers.setTimeout).not.toHaveBeenCalled();
+    expect(util.execBashCommand).toHaveBeenCalledWith(
+      `docker load --input ${docker.DOCKER_IMAGES_PATH}`,
+    );
+  });
+
+  test("bounds Windows readiness retries before attempting the Docker command", async (): Promise<void> => {
+    core.getInput.mockReturnValue("my-key");
+    cache.restoreCache.mockResolvedValueOnce(undefined);
+    dockerReadyMock.mockRejectedValue(new Error("Docker is not ready yet."));
+    util.execBashCommand.mockResolvedValueOnce("");
+
+    await docker.loadDockerImages("win32");
+
+    expect(dockerReadyMock).toHaveBeenCalledTimes(30);
+    expect(timers.setTimeout).toHaveBeenCalledTimes(29);
+    expect(core.info).toHaveBeenCalledWith(
+      "Docker did not become ready on Windows before timeout.",
+    );
+    expect(util.execBashCommand).toHaveBeenCalledTimes(1);
   });
 });

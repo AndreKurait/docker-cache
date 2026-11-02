@@ -16,6 +16,6 @@ describe("Post", (): void => {
   test("saves Docker images on module load", async (): Promise<void> => {
     await import("./post.js");
 
-    expect(docker.saveDockerImages).lastCalledWith();
+    expect(docker.saveDockerImages).toHaveBeenLastCalledWith();
   });
 });

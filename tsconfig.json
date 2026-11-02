@@ -4,8 +4,14 @@
     "@tsconfig/strictest/tsconfig.json"
   ],
   "include": ["jest.config.ts", "src/**/*.ts", "types/**/*.ts"],
-  "exclude": ["**/reports", "src/**/*.test.ts", "src/arbitraries/**", "src/mocks/**"],
+  "exclude": [
+    "**/reports",
+    "src/**/*.test.ts",
+    "src/arbitraries/**",
+    "src/mocks/**"
+  ],
   "compilerOptions": {
+    "rootDir": ".",
     "module": "es2022",
     "moduleResolution": "bundler",
     "outDir": "build"

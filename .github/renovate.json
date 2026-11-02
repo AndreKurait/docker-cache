@@ -1,4 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>ScribeMD/.github#0.14.16"]
+  "extends": ["config:best-practices"],
+  "dependencyDashboardApproval": true,
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 1,
+  "rangeStrategy": "pin"
 }
