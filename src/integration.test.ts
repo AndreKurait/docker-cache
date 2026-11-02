@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
-import { testProp } from "@fast-check/jest";
+import { test } from "@fast-check/jest";
 import { jest } from "@jest/globals";
-import { fullUnicodeString } from "fast-check";
+import { string } from "fast-check";
 
 import { consoleOutput } from "./arbitraries/util.js";
 import { utilFactory } from "./mocks/util.js";
@@ -13,8 +13,19 @@ import type { Mock } from "jest-mock";
 import type { ConsoleOutput } from "./util.js";
 
 jest.unstable_mockModule("node:util", utilFactory);
-jest.mock("@actions/cache");
-jest.mock("@actions/core");
+jest.unstable_mockModule("@actions/cache", () => ({
+  restoreCache: jest.fn(),
+  saveCache: jest.fn(),
+}));
+jest.unstable_mockModule("@actions/core", () => ({
+  getInput: jest.fn(),
+  getState: jest.fn(),
+  info: jest.fn(),
+  error: jest.fn(),
+  setFailed: jest.fn(),
+  saveState: jest.fn(),
+  setOutput: jest.fn(),
+}));
 
 const nodeUtil = jest.mocked(await import("node:util"));
 const cache = jest.mocked(await import("@actions/cache"));
@@ -104,15 +115,24 @@ describe("Integration Test", (): void => {
     command: string,
     output: ConsoleOutput,
   ): void => {
-    expect(core.info).nthCalledWith<[string]>(infoCallNum, command);
-    expect(nodeUtil.promisify).nthCalledWith<[typeof exec]>(execCallNum, exec);
-    expect(execMock).nthCalledWith<[string, ExecOptions]>(
+    expect(core.info).toHaveBeenNthCalledWith<[string]>(infoCallNum, command);
+    expect(nodeUtil.promisify).toHaveBeenNthCalledWith<[typeof exec]>(
+      execCallNum,
+      exec,
+    );
+    expect(execMock).toHaveBeenNthCalledWith<[string, ExecOptions]>(
       execCallNum,
       command,
       EXEC_OPTIONS,
     );
-    expect(core.info).nthCalledWith<[string]>(infoCallNum + 1, output.stdout);
-    expect(core.error).nthCalledWith<[string]>(execCallNum, output.stderr);
+    expect(core.info).toHaveBeenNthCalledWith<[string]>(
+      infoCallNum + 1,
+      output.stdout,
+    );
+    expect(core.error).toHaveBeenNthCalledWith<[string]>(
+      execCallNum,
+      output.stderr,
+    );
     expect(core.setFailed).not.toHaveBeenCalled();
   };
 
@@ -121,15 +141,19 @@ describe("Integration Test", (): void => {
     listStderr: string,
     loadOutput: ConsoleOutput,
   ): void => {
-    expect(core.getInput).nthCalledWith<[string, InputOptions]>(1, "key", {
-      required: true,
-    });
-    expect(core.setOutput).lastCalledWith(docker.CACHE_HIT, cacheHit);
+    expect(core.getInput).toHaveBeenNthCalledWith<[string, InputOptions]>(
+      1,
+      "key",
+      {
+        required: true,
+      },
+    );
+    expect(core.setOutput).toHaveBeenLastCalledWith(docker.CACHE_HIT, cacheHit);
     if (cacheHit) {
       assertExecBashCommand(1, 1, loadCommand, loadOutput);
       expect(core.saveState).toHaveBeenCalledTimes(1);
     } else {
-      expect(core.info).nthCalledWith<[string]>(
+      expect(core.info).toHaveBeenNthCalledWith<[string]>(
         1,
         "Recording preexisting Docker images. These include standard images " +
           "pre-cached by GitHub Actions when Docker is run as root.",
@@ -141,7 +165,7 @@ describe("Integration Test", (): void => {
   };
 
   const assertSaveCacheHit = (key: string): void => {
-    expect(core.info).lastCalledWith(
+    expect(core.info).toHaveBeenLastCalledWith(
       `Cache hit occurred on the primary key ${key}, not saving cache.`,
     );
     expect(execMock).not.toHaveBeenCalled();
@@ -153,11 +177,14 @@ describe("Integration Test", (): void => {
     listStderr: string,
     saveOutput: ConsoleOutput,
   ): void => {
-    expect(core.getInput).lastCalledWith("read-only");
-    expect(core.info).nthCalledWith<[string]>(1, "Listing Docker images.");
+    expect(core.getInput).toHaveBeenLastCalledWith("read-only");
+    expect(core.info).toHaveBeenNthCalledWith<[string]>(
+      1,
+      "Listing Docker images.",
+    );
     const listOutput = joinOutput(dockerImages, listStderr);
     assertExecBashCommand(2, 1, LIST_COMMAND, listOutput);
-    expect(core.info).nthCalledWith<[string]>(
+    expect(core.info).toHaveBeenNthCalledWith<[string]>(
       4,
       "Images present before restore step will be skipped; only new images " +
         "will be saved.",
@@ -172,17 +199,54 @@ describe("Integration Test", (): void => {
     listStderr: string,
     saveOutput: ConsoleOutput,
   ): void => {
-    expect(core.getInput).nthCalledWith<[string, InputOptions]>(1, "key", {
-      required: true,
-    });
+    expect(core.getInput).toHaveBeenNthCalledWith<[string, InputOptions]>(
+      1,
+      "key",
+      {
+        required: true,
+      },
+    );
     cacheHit
       ? assertSaveCacheHit(key)
       : assertSaveCacheMiss(listStderr, saveOutput);
   };
 
-  testProp(
+  test("does not save when another job fills the same cache after the restore step", async (): Promise<void> => {
+    const key = "parallel-job-key";
+    inMemoryCache = new Map<string, string>();
+    state = new Map<string, string>();
+    dockerImages = [];
+    callCount = 0;
+    core.getInput.mockImplementation((name: string): string =>
+      name === "key" ? key : "false",
+    );
+    mockExec("", { stdout: "", stderr: "" });
+
+    await docker.loadDockerImages();
+    expect(core.setOutput).toHaveBeenLastCalledWith(docker.CACHE_HIT, false);
+
+    // Cache versions include the archive paths. Model another job saving the
+    // same archive while this job does its work, before the post step executes.
+    inMemoryCache.set(getKey([docker.DOCKER_IMAGES_PATH], key), key);
+    jest.clearAllMocks();
+
+    await docker.saveDockerImages();
+
+    expect(execMock).not.toHaveBeenCalled();
+    expect(cache.saveCache).not.toHaveBeenCalled();
+    expect(core.info).toHaveBeenCalledWith(
+      "A cache miss occurred during the initial attempt to load Docker " +
+        `images, but subsequently a cache with a matching key, ${key}, was saved. ` +
+        "This can occur when run in parallel. Not saving cache.",
+    );
+  });
+
+  test.prop([
+    string({ unit: "binary" }),
+    string({ unit: "binary" }),
+    consoleOutput(),
+  ])(
     "cache misses, then hits",
-    [fullUnicodeString(), fullUnicodeString(), consoleOutput()],
     async (
       key: string,
       listStderr: string,

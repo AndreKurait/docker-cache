@@ -2,6 +2,12 @@ import type { JestConfigWithTsJest } from "ts-jest";
 
 const config: JestConfigWithTsJest = {
   collectCoverage: true,
+  collectCoverageFrom: [
+    "**/*.ts",
+    "!**/*.test.ts",
+    "!arbitraries/**",
+    "!mocks/**",
+  ],
   coverageDirectory: "reports/jest/",
   coverageProvider: "v8",
   coverageThreshold: {
@@ -20,7 +26,10 @@ const config: JestConfigWithTsJest = {
   // See https://kulshekhar.github.io/ts-jest/docs/guides/esm-support#use-esm-presets.
   preset: "ts-jest/presets/default-esm",
   transform: {
-    "^.+\\.ts$": ["ts-jest", { useESM: true }],
+    "^.+\\.ts$": [
+      "ts-jest",
+      { useESM: true, tsconfig: "<rootDir>/../tsconfig.test.json" },
+    ],
   },
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",
@@ -29,8 +38,8 @@ const config: JestConfigWithTsJest = {
 
 if (process.env["CI"] === "true") {
   config.ci = true;
-  config.collectCoverageFrom = ["**/*.ts"];
   config.reporters = [
+    "default",
     ["jest-junit", { outputDirectory: "<rootDir>/reports/jest/" }],
   ];
 }

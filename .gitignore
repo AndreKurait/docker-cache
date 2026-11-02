@@ -11,6 +11,7 @@ megalinter-reports
 build
 
 # Yarn
+node_modules/
 .pnp.*
 .yarn/*
 !.yarn/patches

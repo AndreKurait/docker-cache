@@ -1,12 +1,4 @@
-import {
-  constantFrom,
-  fullUnicode,
-  fullUnicodeString,
-  record,
-  stringOf,
-  tuple,
-  uniqueArray,
-} from "fast-check";
+import { constantFrom, record, string, tuple, uniqueArray } from "fast-check";
 
 import type { Arbitrary } from "fast-check";
 
@@ -14,15 +6,14 @@ import type { ConsoleOutput } from "../util.js";
 
 export const consoleOutput = (): Arbitrary<ConsoleOutput> =>
   record({
-    stdout: fullUnicodeString(),
-    stderr: fullUnicodeString(),
+    stdout: string({ unit: "binary" }),
+    stderr: string({ unit: "binary" }),
   });
 
 export const dockerImages = (): Arbitrary<string[]> =>
   uniqueArray(
-    stringOf(
-      fullUnicode().filter((char: string): boolean => char !== "\n"),
-      { minLength: 1 },
+    string({ unit: "binary", minLength: 1 }).filter(
+      (image: string): boolean => !image.includes("\n"),
     ),
   );
 

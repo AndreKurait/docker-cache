@@ -1,7 +1,7 @@
 import { exec } from "node:child_process";
-import { testProp } from "@fast-check/jest";
+import { test } from "@fast-check/jest";
 import { jest } from "@jest/globals";
-import { fullUnicodeString } from "fast-check";
+import { string } from "fast-check";
 
 import { consoleOutput, platform } from "./arbitraries/util.js";
 import { utilFactory } from "./mocks/util.js";
@@ -9,7 +9,15 @@ import { utilFactory } from "./mocks/util.js";
 import type { ConsoleOutput } from "./util.js";
 
 jest.unstable_mockModule("node:util", utilFactory);
-jest.mock("@actions/core");
+jest.unstable_mockModule("@actions/core", () => ({
+  getInput: jest.fn(),
+  getState: jest.fn(),
+  info: jest.fn(),
+  error: jest.fn(),
+  setFailed: jest.fn(),
+  saveState: jest.fn(),
+  setOutput: jest.fn(),
+}));
 
 const nodeUtil = jest.mocked(await import("node:util"));
 const core = jest.mocked(await import("@actions/core"));
@@ -32,19 +40,23 @@ describe("Util", (): void => {
 
       const stdout = await util.execBashCommand(command, platform);
 
-      expect(core.info).nthCalledWith<[string]>(1, command);
-      expect(nodeUtil.promisify).lastCalledWith(exec);
+      expect(core.info).toHaveBeenNthCalledWith<[string]>(1, command);
+      expect(nodeUtil.promisify).toHaveBeenLastCalledWith(exec);
       const shell =
         platform === "win32"
           ? "C:\\Program Files\\Git\\bin\\bash.exe"
           : "/usr/bin/bash";
-      expect(execMock).lastCalledWith(command, { shell });
+      expect(execMock).toHaveBeenLastCalledWith(command, { shell });
       return stdout;
     };
 
-    testProp(
+    test.prop([string({ unit: "binary" }), platform(), consoleOutput()], {
+      examples: [
+        ["sample Linux command", "linux", { stdout: "", stderr: "" }],
+        ["sample Windows command", "win32", { stdout: "", stderr: "" }],
+      ],
+    })(
       "ferries command output to GitHub Actions on success",
-      [fullUnicodeString(), platform(), consoleOutput()],
       async (
         command: string,
         platform: NodeJS.Platform,
@@ -54,20 +66,26 @@ describe("Util", (): void => {
         const stdout = await mockedExec(command, null, platform, output);
 
         expect(stdout).toBe(output.stdout);
-        expect(core.info).lastCalledWith(output.stdout);
-        expect(core.error).lastCalledWith(output.stderr);
-      },
-      {
-        examples: [
-          ["sample Linux command", "linux", { stdout: "", stderr: "" }],
-          ["sample Windows command", "win32", { stdout: "", stderr: "" }],
-        ],
+        expect(core.info).toHaveBeenLastCalledWith(output.stdout);
+        expect(core.error).toHaveBeenLastCalledWith(output.stderr);
       },
     );
 
-    testProp(
+    test.prop(
+      [
+        string({ unit: "binary" }),
+        string({ unit: "binary" }),
+        platform(),
+        consoleOutput(),
+      ],
+      {
+        examples: [
+          ["sample Linux command", "", "linux", { stdout: "", stderr: "" }],
+          ["sample Windows command", "", "win32", { stdout: "", stderr: "" }],
+        ],
+      },
+    )(
       "ferries failure to GitHub Actions",
-      [fullUnicodeString(), fullUnicodeString(), platform(), consoleOutput()],
       async (
         command: string,
         errorMessage: string,
@@ -81,13 +99,7 @@ describe("Util", (): void => {
         expect(stdout).toBe("");
         expect(core.info).toHaveBeenCalledTimes(1);
         expect(core.error).not.toHaveBeenCalled();
-        expect(core.setFailed).lastCalledWith(error);
-      },
-      {
-        examples: [
-          ["sample Linux command", "", "linux", { stdout: "", stderr: "" }],
-          ["sample Windows command", "", "win32", { stdout: "", stderr: "" }],
-        ],
+        expect(core.setFailed).toHaveBeenLastCalledWith(error);
       },
     );
   });

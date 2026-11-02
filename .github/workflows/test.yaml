@@ -6,82 +6,40 @@ on:
   push:
     branches:
       - main
-permissions: {}
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
-  pre-commit:
-    name: Run Pre-commit Hooks
+  unit-and-bundle:
+    name: Unit tests and committed bundles
     runs-on: ubuntu-24.04
-    permissions:
-      checks: write # https://github.com/EnricoMi/publish-unit-test-result-action#permissions
-      contents: write # for pre-commit-action
+    timeout-minutes: 15
     steps:
       - name: Check out repository.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Node.js.
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          fetch-depth: 0
-      - name: Get operating system name and version.
-        id: os
-        run: echo "IMAGE=$ImageOS" >>"$GITHUB_OUTPUT"
-      - name: Determine name of MegaLinter Docker image from pre-commit config.
-        id: megalinter
+          node-version-file: package.json
+      - name: Install locked dependencies.
+        run: node .yarn/releases/yarn-4.15.0.cjs install --immutable
+      - name: Type-check and run unit tests.
+        run: node .yarn/releases/yarn-4.15.0.cjs test --runInBand
+      - name: Rebuild the action and verify committed bundles.
         run: |
-          from os import environ
-          from re import compile
-
-          _MEGALINTER_ARGS_PATTERN = compile(
-              "args:\\s*&megalinter-args\\s*\\[--flavor,\\s*(?P<flavor>\\w+),"
-              "\\s*--release,\\s*(?P<release>v(\\d+\\.){2}\\d+)"
-          )
-          with open(".pre-commit-config.yaml", encoding="utf-8") as input_stream:
-              for line in input_stream:
-                  if match := _MEGALINTER_ARGS_PATTERN.search(line):
-                      break
-
-          flavor = match.group("flavor")
-          release = match.group("release")
-          docker_image = f"megalinter-{flavor}:{release}"
-          output_file = environ["GITHUB_OUTPUT"]
-          with open(output_file, "a", encoding="utf-8") as output_stream:
-              output_stream.write(f"DOCKER_IMAGE={docker_image}\n")
-        shell: python
-      - name: Cache Docker images.
-        uses: ./
-        with:
-          key: ${{ steps.megalinter.outputs.DOCKER_IMAGE }}
-          read-only: true
-      - name: Get Yarn cache directory.
-        id: yarn-cache
-        run: |
-          yarn_cache="$(yarn config get cacheFolder)"
-          echo "PATH=$yarn_cache" >>"$GITHUB_OUTPUT"
-      - name: Cache Yarn dependencies.
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ${{ steps.yarn-cache.outputs.PATH }}
-          key: >
-            yarn-${{ steps.os.outputs.IMAGE }}-${{ hashFiles(
-              '**/yarn.lock',
-              '.yarnrc.yml'
-            ) }}
-          restore-keys: yarn-${{ steps.os.outputs.IMAGE }}-
-      # Disabled due to Error: Missing download info for actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
-      # - name: Run pre-commit hooks.
-      #   uses: ScribeMD/pre-commit-action@bc61f671d0d1d526256c65f486e1f0a49da5f572 # 0.9.129
-      - name: Publish test results to GitHub.
-        uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040 # v2.23.0
-        if: always()
-        with:
-          files: src/reports/jest/junit.xml
-          comment_mode: off
+          node .yarn/releases/yarn-4.15.0.cjs build
+          git diff --exit-code -- dist
   save-cache:
     name: Save Cache
+    needs: unit-and-bundle
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
           - windows-2025
-          - windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository.
@@ -110,17 +68,19 @@ jobs:
         shell: bash
   restore-cache:
     name: Restore Cache
+    timeout-minutes: 20
     needs:
       - save-cache
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-22.04
           - ubuntu-24.04
           - windows-2025
-          - windows-latest
     runs-on: ${{ matrix.os }}
     permissions:
+      contents: read
       actions: write # for cache deletion
     steps:
       - name: Check out repository.
@@ -134,16 +94,19 @@ jobs:
           }
         shell: powershell
       - name: Load Docker images.
+        id: restore
         uses: ./
         with:
           key: docker-cache-test-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Verify Docker loaded cached empty image.
         run: |
+          [[ '${{ steps.restore.outputs.cache-hit }}' == 'true' ]] \
+            || { echo 'Expected a cache hit from the save job'; exit 1; }
           id="$(docker images --quiet --filter 'reference=empty')"
           [[ -n "$id" ]] || { echo 'Image "empty" not found'; exit 1; }
         shell: bash
       - name: Delete test cache if permitted (i.e., workflow not triggered from fork).
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           key='docker-cache-test-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}'
           url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/caches?key=$key"
@@ -159,19 +122,3 @@ jobs:
             "$url" \
           || echo "Cache not found (non-fatal)."
         shell: bash
-  notify:
-    name: Notify
-    if: always()
-    needs:
-      - pre-commit
-      - save-cache
-      - restore-cache
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Send Slack notification with workflow result.
-        uses: ScribeMD/slack-templates@7e4cb7ce525cf4f29c6342375b1b0a7f8745f788 # 0.6.38
-        with:
-          bot-token: ${{ secrets.SLACK_BOT_TOKEN }}
-          channel-id: ${{ secrets.SLACK_ACTIONS_CHANNEL_ID }}
-          template: result
-          results: "${{ join(needs.*.result, ' ') }}"
